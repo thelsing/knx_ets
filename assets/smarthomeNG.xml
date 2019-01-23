@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<KNX xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" CreatedBy="KNX MT" ToolVersion="5.1.255.16695" xmlns="http://knx.org/xml/project/11">
+  <ManufacturerData>
+    <Manufacturer RefId="M-00FA">
+      <Catalog>
+        <CatalogSection Id="M-00FA_CS-1" Name="Geräte" Number="1" DefaultLanguage="de">
+          <CatalogItem Id="M-00FA_H-0-0_HP-0000-01-0000_CI-0-1" Name="SmarthomeNG" Number="1" ProductRefId="M-00FA_H-0-0_P-0" Hardware2ProgramRefId="M-00FA_H-0-0_HP-0000-01-0000" DefaultLanguage="de" />
+        </CatalogSection>
+      </Catalog>
+      <ApplicationPrograms>
+        <ApplicationProgram Id="M-00FA_A-0000-01-0000" ApplicationNumber="0" ApplicationVersion="1" ProgramType="ApplicationProgram" MaskVersion="MV-57B0" Name="SHNG" LoadProcedureStyle="MergedProcedure" PeiType="0" DefaultLanguage="de" DynamicTableManagement="false" Linkable="false" MinEtsVersion="4.0">
+          <Static>
+            <Code>
+              <RelativeSegment Id="M-00FA_A-0000-01-0000_RS-04-00000" Name="Parameters" Offset="0" Size="0" LoadStateMachine="4" />
+            </Code>
+            <ParameterTypes />
+            <Parameters />
+            <ParameterRefs />
+            <ComObjectTable />
+            <ComObjectRefs />
+            <AddressTable MaxEntries="255" />
+            <AssociationTable MaxEntries="255" />
+            <LoadProcedures>
+              <LoadProcedure MergeId="2">
+                <LdCtrlRelSegment AppliesTo="full" LsmIdx="4" Size="0" Mode="0" Fill="0" />
+              </LoadProcedure>
+              <LoadProcedure MergeId="4">
+                <LdCtrlWriteRelMem ObjIdx="4" Offset="0" Size="0" Verify="true" />
+              </LoadProcedure>
+            </LoadProcedures>
+            <Options />
+          </Static>
+        </ApplicationProgram>
+      </ApplicationPrograms>
+      <Hardware>
+        <Hardware Id="M-00FA_H-0-0" Name="SmartHomeNG" SerialNumber="0" VersionNumber="0" HasIndividualAddress="true" HasApplicationProgram="true" IsIPEnabled="true">
+          <Products>
+            <Product Id="M-00FA_H-0-0_P-0" Text="SmarthomeNG" OrderNumber="0" IsRailMounted="false" DefaultLanguage="de" />
+          </Products>
+          <Hardware2Programs>
+            <Hardware2Program Id="M-00FA_H-0-0_HP-0000-01-0000" MediumTypes="MT-5">
+              <ApplicationProgramRef RefId="M-00FA_A-0000-01-0000" />
+            </Hardware2Program>
+          </Hardware2Programs>
+        </Hardware>
+      </Hardware>
+    </Manufacturer>
+  </ManufacturerData>
+</KNX>

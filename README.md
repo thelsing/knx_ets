@@ -11,7 +11,7 @@ The knx python module from https://github.com/thelsing/knx/tree/master/knxPython
 ### plugin.yaml
 
 ```yaml
-knx:
+knx_ets:
     class_name: KnxEts
     class_path: plugins.knx_ets
 ```

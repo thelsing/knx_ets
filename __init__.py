@@ -31,19 +31,16 @@ import binascii
 import random
 import time
 import knx
-from datetime import timedelta
 import xml.etree.ElementTree as ET
 
 from lib.item import Items
 from lib.model.smartplugin import *
-from lib.shtime import Shtime
 from cherrypy.lib import static
 
 from . import dpts
 
-# deprecated due to the new smartplugin model
-# KNX_INSTANCE = 'knx_instance'     # which instance of plugin to use for a given item (deprecated!)
 KNX_DPT      = 'knx_dpt'          # data point type
+KNX_STATUS   = 'knx_status'       # status
 KNX_SEND     = 'knx_send'         # send changes within SmartHomeNG to this ga
 KNX_REPLY    = 'knx_reply'        # answer read requests from knx with item value from SmartHomeNG
 KNX_LISTEN   = 'knx_listen'       # write or response from knx will change the value of this item
@@ -53,11 +50,6 @@ KNX_GO       = 'knx_go'
 KNX_CACHE    = 'knx_cache'
 KNX_INIT     = 'knx_init'
 
-ITEM = 'item'
-ITEMS = 'items'
-LOGIC = 'logic'
-LOGICS = 'logics'
-DPT='dpt'
 
 class KnxEts(SmartPlugin):
     ALLOW_MULTIINSTANCE = True
@@ -66,13 +58,20 @@ class KnxEts(SmartPlugin):
     def __init__(self, smarthome):
         from bin.smarthome import VERSION
         self.logger = logging.getLogger(__name__)
-
-        self.shtime = Shtime.get_instance()
-        self.items = {}
         self.sh = smarthome
-        flashFile = smarthome.base_dir + '/var/knx_ets/flash.bin'
-        self.ensure_dir(flashFile)
-        knx.FlashFilePath(flashFile)
+
+        self.knxprodPath = smarthome.base_dir + '/var/knx_ets/smarthomeNG.xml'
+        self.goItemMapping = {}
+        self.items = []
+
+        
+        self.flashFilePath = smarthome.base_dir + '/var/knx_ets/flash.bin'
+        self.ensure_dir(self.flashFilePath)
+        knx.FlashFilePath(self.flashFilePath)
+
+        ET.register_namespace('',"http://knx.org/xml/project/11")
+        ET.register_namespace('xsi',"http://www.w3.org/2001/XMLSchema-instance")
+        ET.register_namespace('xsd',"http://www.w3.org/2001/XMLSchema")
 
         if not self.init_webinterface():
             self._init_complete = False
@@ -92,30 +91,44 @@ class KnxEts(SmartPlugin):
 
     def updated(self, groupObject):
         rawValue = groupObject.value
-        go = groupObject.asap()
+        goNr = groupObject.asap()
      
-        item = self.items[go]
+        item = self.goItemMapping[goNr]
+
+        for go in item.GroupObjects:
+            if go.asap() != goNr:
+                go.value = rawValue
+
         dpt = self.get_iattr_value( item.conf, KNX_DPT)
         value = self.decode(rawValue, dpt)
 
         item(value, "knx_ets")
+
     def run(self):
         """
         Run method for the plugin
-        """        
-        if len(self.items.keys()) != max(self.items.keys()):
+        """
+        if not os.path.isfile(self.knxprodPath):
+            self.generateKnxProd()
+
+        self.buildGoItemMapping()
+
+        if len(self.goItemMapping) == 0:
+            return None
+
+        if len(self.goItemMapping.keys()) != max(self.goItemMapping.keys()):
             self.logger.error("GO-numbers must be continous starting from 1")
             return None
 
         self.groupObjects = knx.GroupObjectList()
 
-        for go in sorted(self.items):
-            item = self.items[go]
+        for go in sorted(self.goItemMapping):
+            item = self.goItemMapping[go]
             dpt = self.get_iattr_value(item.conf, KNX_DPT)
             self.groupObjects.append(knx.GroupObject(dpts.sizes[str(dpt)]))
             currentGo = self.groupObjects[go -1]
             currentGo.callBack(self.updated)
-            item.GroupObject = currentGo
+            item.GroupObjects.append(currentGo)
 
         knx.RegisterGroupObjects(self.groupObjects)
 
@@ -146,31 +159,24 @@ class KnxEts(SmartPlugin):
                         can be sent to the knx with a knx write function within the knx plugin.
         """
         if self.has_iattr(item.conf, KNX_DTP):
-#            self.logger.error("Ignoring {}: please change knx_dtp to knx_dpt.".format(item))
+            self.logger.error("Ignoring {}: please change knx_dtp to knx_dpt.".format(item))
             return None
-        if self.has_iattr(item.conf, KNX_DPT):
-            dpt = self.get_iattr_value( item.conf, KNX_DPT)
-            if dpt not in dpts.decode:
-#                self.logger.warning("Ignoring {} unknown dpt: {}".format(item, dpt))
-                return None
-        elif self.has_iattr(item.conf, KNX_GO):
-#            self.logger.warning(
-#                "Ignoring {}: please add knx_dpt.".format(item))
+        if not self.has_iattr(item.conf, KNX_DPT):
             return None
-        else:
+            
+        dpt = self.get_iattr_value( item.conf, KNX_DPT)
+        if dpt not in dpts.decode:
+            self.logger.warning("Ignoring {} unknown dpt: {}".format(item, dpt))
             return None
+        
+        item.goCount = 1   
+        if self.has_iattr(item.conf, KNX_STATUS):
+            item.goCount += 1
 
-        if not self.has_iattr(item.conf, KNX_GO):
-#            self.logger.warning("Ignoring {}: please add knx_go.".format(item))
-            return None
+        item.GroupObjects = []
+        self.items.append(item)
 
-        go_nr = int(self.get_iattr_value(item.conf, KNX_GO));
-        if go_nr in self.items:
-            self.logger.warning("Double go {}: {} and {}".format(go_nr, self.items[go_nr], item))
-            return None
-
-        self.logger.debug("Item {} is mapped to KNX2 Instance {}".format(item, self.get_instance_name()))
-        self.items[go_nr] = item
+        self.logger.debug("Item {} is mapped to knx_ets({}) with {} groupobjects".format(item, self.get_instance_name(), item.goCount))
 
         return self.update_item
 
@@ -194,13 +200,14 @@ class KnxEts(SmartPlugin):
         :param source: if given it represents the source
         :param dest: if given it represents the dest
         """
-        if not self.has_iattr(item.conf, KNX_GO):
-            return None
 
         if not self.has_iattr(item.conf, KNX_DPT):
             return None
 #        print(caller)    
-        if caller == 'KNX2':
+        if caller == 'knx_ets':
+            return None
+
+        if not knx.Configured():
             return None
 
         dpt = self.get_iattr_value(item.conf, KNX_DPT)
@@ -210,8 +217,102 @@ class KnxEts(SmartPlugin):
         rawValue = bytes(self.encode(value, dpt))
 #        print(rawValue)
 
-        groupObject = item.GroupObject
-        groupObject.value = rawValue
+        for groupObject in item.GroupObjects:
+            groupObject.value = rawValue
+
+    def addComObjects(self, root, appId):
+        nextGoNr = 1
+        for item in self.items:
+            for i in range(item.goCount):
+                dpt = self.get_iattr_value(item.conf, KNX_DPT)
+                size = dpts.sizes[str(dpt)]
+                newElement = ET.Element("ComObject")
+                itemName = str(item)
+                newElement.set("Name",  (itemName[:45] + '..') if len(itemName) > 50 else itemName)
+                newElement.set("Number", str(nextGoNr))
+                newElement.set("Text", str(item.id()))
+                newElement.set("FunctionText", itemName + str(i))
+                newElement.set("ObjectSize", dpts.sizenames[str(dpt)])
+                newElement.set("DatapointType", "")
+                newElement.set("Id", appId + "_O-" + str(nextGoNr))
+
+                if self.get_iattr_value(item.conf, KNX_REPLY):
+                    newElement.set("ReadFlag", "Enabled")
+                else:
+                    newElement.set("ReadFlag", "Disabled")
+
+                if (self.get_iattr_value(item.conf, KNX_LISTEN) 
+                    or self.get_iattr_value(item.conf, KNX_CACHE) 
+                    or self.get_iattr_value(item.conf, KNX_INIT) 
+                    or self.get_iattr_value(item.conf, KNX_POLL)):
+                    newElement.set("WriteFlag", "Enabled")
+                    newElement.set("UpdateFlag", "Enabled")
+                else:
+                    newElement.set("WriteFlag", "Disabled")
+                    newElement.set("UpdateFlag", "Disabled")
+
+                newElement.set("CommunicationFlag", "Enabled")
+
+                if (self.get_iattr_value(item.conf, KNX_SEND)
+                    or self.get_iattr_value(item.conf, KNX_STATUS)):
+                    newElement.set("TransmitFlag", "Enabled")
+                else:
+                    newElement.set("TransmitFlag", "Disabled")
+
+                if (self.get_iattr_value(item.conf, KNX_CACHE) 
+                    or self.get_iattr_value(item.conf, KNX_INIT)):
+                    newElement.set("ReadOnInitFlag", "Enabled")
+                else:
+                    newElement.set("ReadOnInitFlag", "Disabled")
+
+                root.append(newElement)
+                nextGoNr += 1
+
+    def indent(self, elem, level=0):
+        i = "\n" + level*"  "
+        if len(elem):
+            if not elem.text or not elem.text.strip():
+                elem.text = i + "  "
+            if not elem.tail or not elem.tail.strip():
+                elem.tail = i
+            for elem in elem:
+                self.indent(elem, level+1)
+            if not elem.tail or not elem.tail.strip():
+                elem.tail = i
+        else:
+            if level and (not elem.tail or not elem.tail.strip()):
+                elem.tail = i
+
+    def generateKnxProd(self):
+        sourcePath = self.sh.base_dir + '/plugins/knx_ets/assets/smarthomeNG.xml'
+        tree = ET.parse(sourcePath)
+        root = tree.getroot()
+
+        appProg = root.find(".//{http://knx.org/xml/project/11}ApplicationProgram")
+        appId = appProg.get("Id")
+
+        comObjs = root.find(".//{http://knx.org/xml/project/11}ComObjectTable")
+        self.addComObjects(comObjs, appId)
+
+        coRefs = root.find(".//{http://knx.org/xml/project/11}ComObjectRefs")
+        for element in root.findall(".//{http://knx.org/xml/project/11}ComObject"):
+            goNr = int(element.get('Number'))
+            item = self.sh.return_item(element.get('Name'))
+            newElement = ET.Element("ComObjectRef")
+            newElement.set("Id", appId + "_O-" + str(goNr)+"_R-1")
+            newElement.set("RefId", appId + "_O-" + str(goNr))
+            coRefs.append(newElement)
+
+        self.indent(root)
+        tree.write(self.knxprodPath, encoding="utf-8", xml_declaration=True)
+
+    def buildGoItemMapping(self):
+        tree = ET.parse(self.knxprodPath)
+        root = tree.getroot()
+        for element in root.findall(".//{http://knx.org/xml/project/11}ComObject"):
+            goNr = int(element.get('Number'))
+            item = self.sh.return_item(element.get('Name'))
+            self.goItemMapping[goNr] = item
 
     def init_webinterface(self):
         """"
@@ -271,99 +372,10 @@ class WebInterface(SmartPluginWebIf):
         self.plugin = plugin
         self.tplenv = self.init_template_environment()
 
-    def addComObjects(self, root, appId):
-        for go in sorted(self.plugin.items):
-            item = self.plugin.items[go]
-            dpt = self.plugin.get_iattr_value(item.conf, KNX_DPT)
-            size = dpts.sizes[str(dpt)]
-            newElement = ET.Element("ComObject")
-            newElement.set("Name", str(item))
-            newElement.set("Number", str(go))
-            newElement.set("Text", "Testtext")
-            newElement.set("FunctionText", "Testfunctiontext")
-            newElement.set("ObjectSize", dpts.sizenames[str(dpt)])
-            newElement.set("DatapointType", "")
-            newElement.set("Id", appId + "_O-" + str(go))
 
-            if self.plugin.get_iattr_value(item.conf, KNX_REPLY):
-                newElement.set("ReadFlag", "Enabled")
-            else:
-                newElement.set("ReadFlag", "Disabled")
-
-            if (self.plugin.get_iattr_value(item.conf, KNX_LISTEN) 
-                or self.plugin.get_iattr_value(item.conf, KNX_CACHE) 
-                or self.plugin.get_iattr_value(item.conf, KNX_INIT) 
-                or self.plugin.get_iattr_value(item.conf, KNX_POLL)):
-                newElement.set("WriteFlag", "Enabled")
-                newElement.set("UpdateFlag", "Enabled")
-            else:
-                newElement.set("WriteFlag", "Disabled")
-                newElement.set("UpdateFlag", "Disabled")
-
-            newElement.set("CommunicationFlag", "Enabled")
-
-            if self.plugin.get_iattr_value(item.conf, KNX_SEND):
-                newElement.set("TransmitFlag", "Enabled")
-            else:
-                newElement.set("TransmitFlag", "Disabled")
-
-            if (self.plugin.get_iattr_value(item.conf, KNX_CACHE) 
-                or self.plugin.get_iattr_value(item.conf, KNX_INIT)):
-                newElement.set("ReadOnInitFlag", "Enabled")
-            else:
-                newElement.set("ReadOnInitFlag", "Disabled")
-
-            root.append(newElement)
-
-    def addComObjectRefs(self, root, appId):
-        for go in sorted(self.plugin.items):
-            item = self.plugin.items[go]
-            dpt = self.plugin.get_iattr_value(item.conf, KNX_DPT)
-            size = dpts.sizes[str(dpt)]
-            newElement = ET.Element("ComObjectRef")
-            newElement.set("Id", appId + "_O-" + str(go)+"_R-1")
-            newElement.set("RefId", appId + "_O-" + str(go))
-
-            root.append(newElement)
-
-    def indent(self, elem, level=0):
-        i = "\n" + level*"  "
-        if len(elem):
-            if not elem.text or not elem.text.strip():
-                elem.text = i + "  "
-            if not elem.tail or not elem.tail.strip():
-                elem.tail = i
-            for elem in elem:
-                self.indent(elem, level+1)
-            if not elem.tail or not elem.tail.strip():
-                elem.tail = i
-        else:
-            if level and (not elem.tail or not elem.tail.strip()):
-                elem.tail = i
-
-    def generateKnxProd(self):
-        targetPath = self.plugin.sh.base_dir + '/var/knx_ets/smarthomeNG.xml'
-        sourcePath = self.plugin.sh.base_dir + '/plugins/knx_ets/assets/smarthomeNG.xml'
-        ET.register_namespace('',"http://knx.org/xml/project/11")
-        ET.register_namespace('xsi',"http://www.w3.org/2001/XMLSchema-instance")
-        ET.register_namespace('xsd',"http://www.w3.org/2001/XMLSchema")
-        tree = ET.parse(sourcePath)
-        root = tree.getroot()
-
-        appProg = root.find(".//{http://knx.org/xml/project/11}ApplicationProgram")
-        appId = appProg.get("Id")
-
-        for element in root.findall(".//{http://knx.org/xml/project/11}ComObjectTable"):
-            self.addComObjects(element, appId)
-
-        for element in root.findall(".//{http://knx.org/xml/project/11}ComObjectRefs"):
-            self.addComObjectRefs(element, appId)
-
-        self.indent(root)
-        tree.write(targetPath, encoding="utf-8", xml_declaration=True)
 
     @cherrypy.expose
-    def index(self, reload=None, toggleProgramMode = False, getKnxProd = False):
+    def index(self, reload=None, toggleProgramMode = False, getKnxProd = False, deleteConfig = False):
         """
         Build index.html for cherrypy
         Render the template and return the html file to be delivered to the browser
@@ -373,10 +385,16 @@ class WebInterface(SmartPluginWebIf):
             knx.ProgramMode(not knx.ProgramMode())
 
         if getKnxProd:
-            self.generateKnxProd()
-            file = self.plugin.sh.base_dir + '/var/knx_ets/smarthomeNG.xml'
-            return static.serve_file(file, 'application/x-download',
-                                 'attachment', os.path.basename(file))
+            if not os.path.isfile(self.plugin.knxprodPath):
+                self.plugin.generateKnxProd()
+            return static.serve_file(self.plugin.knxprodPath, 'application/x-download',
+                                 'attachment', os.path.basename(self.plugin.knxprodPath))
+
+        if deleteConfig:
+            if os.path.exists(self.plugin.knxprodPath):
+                os.remove(self.plugin.knxprodPath)
+            if os.path.exists(self.plugin.flashFilePath):
+                os.remove(self.plugin.flashFilePath)
 
         tmpl = self.tplenv.get_template('index.html')
         return tmpl.render(plugin_shortname=self.plugin.get_shortname(), plugin_version=self.plugin.get_version(),

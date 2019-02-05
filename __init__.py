@@ -311,7 +311,7 @@ class KnxEts(SmartPlugin):
         root = tree.getroot()
         for element in root.findall(".//{http://knx.org/xml/project/11}ComObject"):
             goNr = int(element.get('Number'))
-            item = self.sh.return_item(element.get('Name'))
+            item = self.sh.return_item(element.get('Text'))
             self.goItemMapping[goNr] = item
 
     def init_webinterface(self):

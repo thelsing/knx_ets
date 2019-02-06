@@ -168,7 +168,7 @@ def de9(payload):
 
 
 def en10(dt):
-    return [0, (dt.isoweekday() << 5) | dt.hour, dt.minute, dt.second]
+    return [(dt.isoweekday() << 5) | dt.hour, dt.minute, dt.second]
 
 
 def de10(payload):
@@ -179,7 +179,7 @@ def de10(payload):
 
 
 def en11(date):
-    return [0, date.day, date.month, date.year - 2000]
+    return [date.day, date.month, date.year - 2000]
 
 
 def de11(payload):
@@ -324,10 +324,10 @@ sizes = {
     '12': 4,
     '13': 4,
     '14': 14,
-    '16000': 255,
-    '16': 255,
-    '16001': 255,
-    '16.001': 255,
+    '16000': 14,
+    '16': 14,
+    '16001': 14,
+    '16.001': 14,
     '17': 1,
     '17001': 1,
     '17.001': 1,

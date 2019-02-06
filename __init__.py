@@ -59,6 +59,8 @@ class KnxEts(SmartPlugin):
         from bin.smarthome import VERSION
         self.logger = logging.getLogger(__name__)
         self.sh = smarthome
+        self.alive = False
+        self.gosRegistered = False
 
         self.knxprodPath = smarthome.base_dir + '/var/knx_ets/smarthomeNG.xml'
         self.goItemMapping = {}
@@ -95,9 +97,12 @@ class KnxEts(SmartPlugin):
      
         item = self.goItemMapping[goNr]
 
-        for go in item.GroupObjects:
-            if go.asap() != goNr:
-                go.value = rawValue
+        #print("updated " + str(goNr) + " " + str(item) + " #gos " + str(len(item.GroupObjects)))
+
+        for goNr in item.GroupObjects:
+            groupObject = self.groupObjects[goNr -1]
+            if groupObject.asap() != goNr:
+                groupObject.value = rawValue 
 
         dpt = self.get_iattr_value( item.conf, KNX_DPT)
         value = self.decode(rawValue, dpt)
@@ -120,19 +125,22 @@ class KnxEts(SmartPlugin):
             self.logger.error("GO-numbers must be continous starting from 1")
             return None
 
-        self.groupObjects = knx.GroupObjectList()
+        if not self.gosRegistered:
+            self.groupObjects = knx.GroupObjectList()
 
-        for go in sorted(self.goItemMapping):
-            item = self.goItemMapping[go]
-            dpt = self.get_iattr_value(item.conf, KNX_DPT)
-            self.groupObjects.append(knx.GroupObject(dpts.sizes[str(dpt)]))
-            currentGo = self.groupObjects[go -1]
-            currentGo.callBack(self.updated)
-            item.GroupObjects.append(currentGo)
+            for go in sorted(self.goItemMapping):
+                item = self.goItemMapping[go]
+                dpt = self.get_iattr_value(item.conf, KNX_DPT)
+                self.groupObjects.append(knx.GroupObject(dpts.sizes[str(dpt)]))
+                currentGo = self.groupObjects[go -1]
+                currentGo.callBack(self.updated)
+                item.GroupObjects.append(go)
 
-        knx.RegisterGroupObjects(self.groupObjects)
+            knx.RegisterGroupObjects(self.groupObjects)
+            self.gosRegistered = True
 
         knx.Start()
+
         self.alive = True
 
 
@@ -200,10 +208,12 @@ class KnxEts(SmartPlugin):
         :param source: if given it represents the source
         :param dest: if given it represents the dest
         """
+        if not self.alive:
+            return None
 
         if not self.has_iattr(item.conf, KNX_DPT):
             return None
-#        print(caller)    
+        #print(caller)    
         if caller == 'knx_ets':
             return None
 
@@ -213,11 +223,13 @@ class KnxEts(SmartPlugin):
         dpt = self.get_iattr_value(item.conf, KNX_DPT)
 
         value = item()
-#        print(value)
+        #print(value)
         rawValue = bytes(self.encode(value, dpt))
-#        print(rawValue)
+        #print(rawValue)
 
-        for groupObject in item.GroupObjects:
+        for goNr in item.GroupObjects:
+            groupObject = self.groupObjects[goNr -1]
+            #print(groupObject.asap())
             groupObject.value = rawValue
 
     def addComObjects(self, root, appId):

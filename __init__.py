@@ -95,6 +95,9 @@ class KnxEts(SmartPlugin):
         rawValue = groupObject.value
         goNr = groupObject.asap()
      
+        if not goNr in self.goItemMapping.keys():
+            return None
+
         item = self.goItemMapping[goNr]
 
         #print("updated " + str(goNr) + " " + str(item) + " #gos " + str(len(item.GroupObjects)))
@@ -113,8 +116,7 @@ class KnxEts(SmartPlugin):
         """
         Run method for the plugin
         """
-        if not os.path.isfile(self.knxprodPath):
-            self.generateKnxProd()
+        self.generateKnxProd()
 
         self.buildGoItemMapping()
 
@@ -130,6 +132,9 @@ class KnxEts(SmartPlugin):
 
             for go in sorted(self.goItemMapping):
                 item = self.goItemMapping[go]
+                if item is None:
+                    continue
+
                 dpt = self.get_iattr_value(item.conf, KNX_DPT)
                 self.groupObjects.append(knx.GroupObject(dpts.sizes[str(dpt)]))
                 currentGo = self.groupObjects[go -1]
@@ -183,7 +188,6 @@ class KnxEts(SmartPlugin):
 
         item.GroupObjects = []
         self.items.append(item)
-
         self.logger.debug("Item {} is mapped to knx_ets({}) with {} groupobjects".format(item, self.get_instance_name(), item.goCount))
 
         return self.update_item
@@ -233,16 +237,27 @@ class KnxEts(SmartPlugin):
             groupObject.value = rawValue
 
     def addComObjects(self, root, appId):
-        nextGoNr = 1
+        nextGoNr = len(root.getchildren()) + 1
+        modified = False
         for item in self.items:
             for i in range(item.goCount):
+                identifier = str(item.id())
+               
+                if i > 0:
+                    identifier += "_" + str(i)
+
+                commObj = root.find('.//{http://knx.org/xml/project/11}ComObject[@Text="' + identifier + '"]',)
+                if not commObj is None:
+                    continue
+
+                modified = True
                 dpt = self.get_iattr_value(item.conf, KNX_DPT)
                 size = dpts.sizes[str(dpt)]
                 newElement = ET.Element("ComObject")
                 itemName = str(item)
-                newElement.set("Name",  (itemName[:45] + '..') if len(itemName) > 50 else itemName)
+                newElement.set("Name", (itemName[:45] + '..') if len(itemName) > 50 else itemName)
                 newElement.set("Number", str(nextGoNr))
-                newElement.set("Text", str(item.id()))
+                newElement.set("Text", identifier)
                 newElement.set("FunctionText", itemName + str(i))
                 newElement.set("ObjectSize", dpts.sizenames[str(dpt)])
                 newElement.set("DatapointType", "")
@@ -279,6 +294,8 @@ class KnxEts(SmartPlugin):
 
                 root.append(newElement)
                 nextGoNr += 1
+        
+        return modified
 
     def indent(self, elem, level=0):
         i = "\n" + level*"  "
@@ -297,26 +314,32 @@ class KnxEts(SmartPlugin):
 
     def generateKnxProd(self):
         sourcePath = self.sh.base_dir + '/plugins/knx_ets/assets/smarthomeNG.xml'
+
+        if os.path.isfile(self.knxprodPath):
+            sourcePath = self.knxprodPath
+
         tree = ET.parse(sourcePath)
         root = tree.getroot()
 
         appProg = root.find(".//{http://knx.org/xml/project/11}ApplicationProgram")
         appId = appProg.get("Id")
 
-        comObjs = root.find(".//{http://knx.org/xml/project/11}ComObjectTable")
-        self.addComObjects(comObjs, appId)
+        version = int(appProg.get("ApplicationVersion"))
 
-        coRefs = root.find(".//{http://knx.org/xml/project/11}ComObjectRefs")
-        for element in root.findall(".//{http://knx.org/xml/project/11}ComObject"):
-            goNr = int(element.get('Number'))
-            item = self.sh.return_item(element.get('Name'))
-            newElement = ET.Element("ComObjectRef")
-            newElement.set("Id", appId + "_O-" + str(goNr)+"_R-1")
-            newElement.set("RefId", appId + "_O-" + str(goNr))
-            coRefs.append(newElement)
+        comObjs = root.find(".//{http://knx.org/xml/project/11}ComObjectTable")
+        modified = self.addComObjects(comObjs, appId)
+
+        if not modified:
+            return
+
+        appProg.set("ApplicationVersion", str(version + 1))
+        appProg.set("ReplacesVersions", str(version))
 
         self.indent(root)
         tree.write(self.knxprodPath, encoding="utf-8", xml_declaration=True)
+
+        if os.path.exists(self.plugin.flashFilePath):
+            os.remove(self.plugin.flashFilePath)
 
     def buildGoItemMapping(self):
         tree = ET.parse(self.knxprodPath)
@@ -403,8 +426,6 @@ class WebInterface(SmartPluginWebIf):
                                  'attachment', os.path.basename(self.plugin.knxprodPath))
 
         if deleteConfig:
-            if os.path.exists(self.plugin.knxprodPath):
-                os.remove(self.plugin.knxprodPath)
             if os.path.exists(self.plugin.flashFilePath):
                 os.remove(self.plugin.flashFilePath)
 

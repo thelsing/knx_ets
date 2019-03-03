@@ -337,8 +337,8 @@ class KnxEts(SmartPlugin):
         self.indent(root)
         tree.write(self.knxprodPath, encoding="utf-8", xml_declaration=True)
 
-        if os.path.exists(self.plugin.flashFilePath):
-            os.remove(self.plugin.flashFilePath)
+        if os.path.exists(self.flashFilePath):
+            os.remove(self.flashFilePath)
 
     def buildGoItemMapping(self):
         tree = ET.parse(self.knxprodPath)

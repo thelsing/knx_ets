@@ -92,15 +92,16 @@ class KnxEts(SmartPlugin):
         return dpts.decode[str(dpt)](data)
 
     def updated(self, groupObject):
+        #print("updated")
         rawValue = groupObject.value
         goNr = groupObject.asap()
      
-        if not goNr in self.goItemMapping.keys():
-            return None
-
-        item = self.goItemMapping[goNr]
+        item = self.goItemMapping[goNr][0]
 
         #print("updated " + str(goNr) + " " + str(item) + " #gos " + str(len(item.GroupObjects)))
+
+        if item is None:
+            return
 
         for goNr in item.GroupObjects:
             groupObject = self.groupObjects[goNr -1]
@@ -131,15 +132,14 @@ class KnxEts(SmartPlugin):
             self.groupObjects = knx.GroupObjectList()
 
             for go in sorted(self.goItemMapping):
-                item = self.goItemMapping[go]
-                if item is None:
-                    continue
+                item = self.goItemMapping[go][0]
+                size = self.goItemMapping[go][1]
 
-                dpt = self.get_iattr_value(item.conf, KNX_DPT)
-                self.groupObjects.append(knx.GroupObject(dpts.sizes[str(dpt)]))
+                self.groupObjects.append(knx.GroupObject(size))
                 currentGo = self.groupObjects[go -1]
                 currentGo.callBack(self.updated)
-                item.GroupObjects.append(go)
+                if not item is None:
+                    item.GroupObjects.append(go)
 
             knx.RegisterGroupObjects(self.groupObjects)
             self.gosRegistered = True
@@ -154,7 +154,6 @@ class KnxEts(SmartPlugin):
         Stop method for the plugin
         """
         knx.Stop()
-        self.logger.debug("stop method called")
         self.alive = False
 
 
@@ -347,7 +346,8 @@ class KnxEts(SmartPlugin):
         for element in root.findall(".//{http://knx.org/xml/project/11}ComObject"):
             goNr = int(element.get('Number'))
             item = self.sh.return_item(element.get('Text'))
-            self.goItemMapping[goNr] = item
+            objectSizeName = element.get('ObjectSize')
+            self.goItemMapping[goNr] = [item, dpts.sizeNameToSize(objectSizeName)]
 
     def init_webinterface(self):
         """"

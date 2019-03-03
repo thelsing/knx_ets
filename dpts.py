@@ -305,6 +305,10 @@ def de232(payload):
         return None
     return list(struct.unpack('>BBB', payload))
 
+def sizeNameToSize(sizeName):
+    if sizeName.endswith('Bit') or sizeName.endswith("Byte"):
+        return 1
+    return int(sizeName.split(' ')[0])
 
 sizes = {
     '1': 1,

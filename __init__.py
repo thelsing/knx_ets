@@ -32,6 +32,7 @@ import random
 import time
 import knx
 import xml.etree.ElementTree as ET
+import sys
 
 from lib.item import Items
 from lib.model.smartplugin import *
@@ -65,7 +66,10 @@ class KnxEts(SmartPlugin):
         self.knxprodPath = smarthome.base_dir + '/var/knx_ets/smarthomeNG.xml'
         self.goItemMapping = {}
         self.items = []
-
+        
+        args = sys.argv
+        args.insert(0, sys.executable)
+        knx.Prepare(args)
         
         self.flashFilePath = smarthome.base_dir + '/var/knx_ets/flash.bin'
         self.ensure_dir(self.flashFilePath)
@@ -92,19 +96,18 @@ class KnxEts(SmartPlugin):
         return dpts.decode[str(dpt)](data)
 
     def updated(self, groupObject):
-        #print("updated")
         rawValue = groupObject.value
         goNr = groupObject.asap()
      
-        item = self.goItemMapping[goNr][0]
+        item = self.goItemMapping[goNr]
 
-        #print("updated " + str(goNr) + " " + str(item) + " #gos " + str(len(item.GroupObjects)))
+      #  print("updated " + str(goNr) + " " + str(item) + " #gos " + str(len(item.GroupObjects)))
 
         if item is None:
             return
 
         for goNr in item.GroupObjects:
-            groupObject = self.groupObjects[goNr -1]
+            groupObject = knx.GetGroupObject(goNr)
             if groupObject.asap() != goNr:
                 groupObject.value = rawValue 
 
@@ -127,22 +130,17 @@ class KnxEts(SmartPlugin):
         if len(self.goItemMapping.keys()) != max(self.goItemMapping.keys()):
             self.logger.error("GO-numbers must be continous starting from 1")
             return None
-
-        if not self.gosRegistered:
-            self.groupObjects = knx.GroupObjectList()
-
+        
+        knx.ReadMemory()
+        if knx.Configured():
+       #     print("knx configured")
             for go in sorted(self.goItemMapping):
-                item = self.goItemMapping[go][0]
-                size = self.goItemMapping[go][1]
+                item = self.goItemMapping[go]
 
-                self.groupObjects.append(knx.GroupObject(size))
-                currentGo = self.groupObjects[go -1]
+                currentGo = knx.GetGroupObject(go)
                 currentGo.callBack(self.updated)
                 if not item is None:
                     item.GroupObjects.append(go)
-
-            knx.RegisterGroupObjects(self.groupObjects)
-            self.gosRegistered = True
 
         knx.Start()
 
@@ -216,7 +214,7 @@ class KnxEts(SmartPlugin):
 
         if not self.has_iattr(item.conf, KNX_DPT):
             return None
-        #print(caller)    
+        print(caller)    
         if caller == 'knx_ets':
             return None
 
@@ -226,13 +224,13 @@ class KnxEts(SmartPlugin):
         dpt = self.get_iattr_value(item.conf, KNX_DPT)
 
         value = item()
-        #print(value)
+        print(value)
         rawValue = bytes(self.encode(value, dpt))
-        #print(rawValue)
+        print(rawValue)
 
         for goNr in item.GroupObjects:
-            groupObject = self.groupObjects[goNr -1]
-            #print(groupObject.asap())
+            groupObject = knx.GetGroupObject(goNr)
+            print(groupObject.asap())
             groupObject.value = rawValue
 
     def addComObjects(self, root, appId):
@@ -346,8 +344,7 @@ class KnxEts(SmartPlugin):
         for element in root.findall(".//{http://knx.org/xml/project/11}ComObject"):
             goNr = int(element.get('Number'))
             item = self.sh.return_item(element.get('Text'))
-            objectSizeName = element.get('ObjectSize')
-            self.goItemMapping[goNr] = [item, dpts.sizeNameToSize(objectSizeName)]
+            self.goItemMapping[goNr] = item
 
     def init_webinterface(self):
         """"

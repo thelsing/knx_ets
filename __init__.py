@@ -101,7 +101,7 @@ class KnxEts(SmartPlugin):
      
         item = self.goItemMapping[goNr]
 
-      #  print("updated " + str(goNr) + " " + str(item) + " #gos " + str(len(item.GroupObjects)))
+        self.logger.debug("updated " + str(goNr) + " " + str(item) + " #gos " + str(len(item.GroupObjects)))
 
         if item is None:
             return
@@ -130,17 +130,20 @@ class KnxEts(SmartPlugin):
         if len(self.goItemMapping.keys()) != max(self.goItemMapping.keys()):
             self.logger.error("GO-numbers must be continous starting from 1")
             return None
-        
+        self.logger.debug(knx.FlashFilePath()) 
         knx.ReadMemory()
         if knx.Configured():
-       #     print("knx configured")
+            self.logger.info("knx configured")
             for go in sorted(self.goItemMapping):
                 item = self.goItemMapping[go]
-
                 currentGo = knx.GetGroupObject(go)
-                currentGo.callBack(self.updated)
+                
+                if not currentGo is None:
+                    currentGo.callBack(self.updated)
                 if not item is None:
                     item.GroupObjects.append(go)
+        else:
+            self.logger.info("knx not configured")
 
         knx.Start()
 
@@ -214,7 +217,7 @@ class KnxEts(SmartPlugin):
 
         if not self.has_iattr(item.conf, KNX_DPT):
             return None
-        print(caller)    
+        
         if caller == 'knx_ets':
             return None
 
@@ -224,13 +227,12 @@ class KnxEts(SmartPlugin):
         dpt = self.get_iattr_value(item.conf, KNX_DPT)
 
         value = item()
-        print(value)
+        #print(value)
         rawValue = bytes(self.encode(value, dpt))
-        print(rawValue)
+        #print(rawValue)
 
         for goNr in item.GroupObjects:
             groupObject = knx.GetGroupObject(goNr)
-            print(groupObject.asap())
             groupObject.value = rawValue
 
     def addComObjects(self, root, appId):

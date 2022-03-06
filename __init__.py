@@ -212,6 +212,7 @@ class KnxEts(SmartPlugin):
         :param source: if given it represents the source
         :param dest: if given it represents the dest
         """
+        self.logger.debug("item {} updated from {}, source {}, dest {}".format(item, caller, source, dest))	
         if not self.alive:
             return None
 
@@ -227,16 +228,16 @@ class KnxEts(SmartPlugin):
         dpt = self.get_iattr_value(item.conf, KNX_DPT)
 
         value = item()
-        #print(value)
+#        print(value)
         rawValue = bytes(self.encode(value, dpt))
-        #print(rawValue)
+#        print(rawValue)
 
         for goNr in item.GroupObjects:
             groupObject = knx.GetGroupObject(goNr)
             groupObject.value = rawValue
 
     def addComObjects(self, root, appId):
-        nextGoNr = len(root.getchildren()) + 1
+        nextGoNr = len(root) + 1
         modified = False
         for item in self.items:
             for i in range(item.goCount):

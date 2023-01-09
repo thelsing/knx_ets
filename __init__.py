@@ -236,7 +236,7 @@ class KnxEts(SmartPlugin):
             groupObject = knx.GetGroupObject(goNr)
             groupObject.value = rawValue
 
-    def addComObjects(self, root, appId):
+    def addComObjects(self, root, ComObjectRefs, ComObjectRefRefs, appId):
         nextGoNr = len(root) + 1
         modified = False
         for item in self.items:
@@ -261,7 +261,16 @@ class KnxEts(SmartPlugin):
                 newElement.set("FunctionText", itemName + str(i))
                 newElement.set("ObjectSize", dpts.sizenames[str(dpt)])
                 newElement.set("DatapointType", "")
-                newElement.set("Id", appId + "_O-" + str(nextGoNr))
+                Id=appId + "_O-" + str(nextGoNr)
+                newElement.set("Id", Id)
+                
+                newComObjectRef = ET.Element("ComObjectRef")
+                newComObjectRef.set("Id", Id + "_R-" + str(nextGoNr))
+                newComObjectRef.set("RefId", Id)
+                
+                newComObjectRefRef= ET.Element("ComObjectRefRef") 
+                newComObjectRefRef.set("RefId", Id + "_R-" + str(nextGoNr))
+                
 
                 if self.get_iattr_value(item.conf, KNX_REPLY):
                     newElement.set("ReadFlag", "Enabled")
@@ -292,7 +301,10 @@ class KnxEts(SmartPlugin):
                 else:
                     newElement.set("ReadOnInitFlag", "Disabled")
 
-                root.append(newElement)
+                root.append(newElement) 
+                ComObjectRefs.append(newComObjectRef)
+                ComObjectRefRefs.append(newComObjectRefRef)
+                
                 nextGoNr += 1
         
         return modified
@@ -327,7 +339,10 @@ class KnxEts(SmartPlugin):
         version = int(appProg.get("ApplicationVersion"))
 
         comObjs = root.find(".//{http://knx.org/xml/project/11}ComObjectTable")
-        modified = self.addComObjects(comObjs, appId)
+        ComObjectRefs = root.find(".//{http://knx.org/xml/project/11}ComObjectRefs")
+        ComObjectRefRefs = root.find(".//{http://knx.org/xml/project/11}ChannelIndependentBlock")
+        
+        modified = self.addComObjects(comObjs, ComObjectRefs, ComObjectRefRefs, appId)
 
         if not modified:
             return
@@ -338,8 +353,8 @@ class KnxEts(SmartPlugin):
         self.indent(root)
         tree.write(self.knxprodPath, encoding="utf-8", xml_declaration=True)
 
-        if os.path.exists(self.flashFilePath):
-            os.remove(self.flashFilePath)
+   #     if os.path.exists(self.flashFilePath):
+   #         os.remove(self.flashFilePath)
 
     def buildGoItemMapping(self):
         tree = ET.parse(self.knxprodPath)
@@ -420,8 +435,8 @@ class WebInterface(SmartPluginWebIf):
             knx.ProgramMode(not knx.ProgramMode())
 
         if getKnxProd:
-            if not os.path.isfile(self.plugin.knxprodPath):
-                self.plugin.generateKnxProd()
+            #if not os.path.isfile(self.plugin.knxprodPath):
+            self.plugin.generateKnxProd()
             return static.serve_file(self.plugin.knxprodPath, 'application/x-download',
                                  'attachment', os.path.basename(self.plugin.knxprodPath))
 

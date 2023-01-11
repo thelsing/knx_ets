@@ -334,9 +334,24 @@ class KnxEts(SmartPlugin):
         root = tree.getroot()
 
         appProg = root.find(".//{http://knx.org/xml/project/11}ApplicationProgram")
-        appId = appProg.get("Id")
-
+        
         version = int(appProg.get("ApplicationVersion"))
+        
+        //Rename all references with the old AppId
+        appId = appProg.get("Id")
+        appReplaceOld = appId[9:]
+        appId = appId.Replace("-" + ("%02X" % version) + "-", "-" + ("%02X" % (version+1)) + "-");
+        appProg.set("Id", appId)
+        appReplaceNew = appId[9:]
+        tempObj = root.find(".//{http://knx.org/xml/project/11}CatalogItem")
+        tempObj.set("Id", tempObj.get("Id").replace(appReplaceOld, appReplaceNew))
+        tempObj.set("Hardware2ProgramRefId", tempObj.get("Hardware2ProgramRefId").replace(appReplaceOld, appReplaceNew))        
+        tempObj = root.find(".//{http://knx.org/xml/project/11}Hardware2Program")
+        tempObj.set("Id", tempObj.get("Id").replace(appReplaceOld, appReplaceNew))  
+        tempObj = root.find(".//{http://knx.org/xml/project/11}ApplicationProgramRef")
+        tempObj.set("RefId", tempObj.get("RefId").replace(appReplaceOld, appReplaceNew))
+        tempObj = root.find(".//{http://knx.org/xml/project/11}RelativeSegment")
+        tempObj.set("Id", tempObj.get("Id").replace(appReplaceOld, appReplaceNew))
 
         comObjs = root.find(".//{http://knx.org/xml/project/11}ComObjectTable")
         ComObjectRefs = root.find(".//{http://knx.org/xml/project/11}ComObjectRefs")

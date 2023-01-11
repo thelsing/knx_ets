@@ -341,6 +341,7 @@ class KnxEts(SmartPlugin):
         appId = appProg.get("Id")
         appReplaceOld = appId[9:]
         appId = appId.Replace("-" + ("%02X" % version) + "-", "-" + ("%02X" % (version+1)) + "-");
+        appProg.set("Id", appId)
         appReplaceNew = appId[9:]
         tempObj = root.find(".//{http://knx.org/xml/project/11}CatalogItem")
         tempObj.set("Id", tempObj.get("Id").replace(appReplaceOld, appReplaceNew))

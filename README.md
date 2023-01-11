@@ -1,10 +1,10 @@
 # KNX_ETS
 
-Send and receive messages to and from knx bus via a knx router. The plugin has to be configured with ets. On the web-interface are buttons to enable the programming mode and to generate a knx-prod-xml file. This file can be used with https://github.com/thelsing/CreateKnxProd to generate a knx-prod file for ETS.
+Send and receive messages to and from knx bus via a knx router. The plugin has to be configured with ets. On the web-interface are buttons to enable the programming mode and to generate a knx-prod-xml file. This file can be used with [Kaenx-Creator](https://github.com/OpenKNX/Kaenx-Creator) or [OpenKnxProducer](https://github.com/OpenKNX/OpenKNXproducer) to generate a knx-prod file for ETS.
 
 ## Requirements
 
-The knx python module from https://github.com/thelsing/knx/tree/master/knxPython
+The knx python module from https://github.com/thelsing/knx/tree/master/examples/knxPython
 
 ## Configuration
 
